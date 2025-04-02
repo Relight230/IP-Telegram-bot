@@ -77,10 +77,11 @@ async def handle_weather_city(update: Update, context: CallbackContext) -> int:
     await update.message.reply_text(forecast_info, reply_markup=reply_markup)
     return SELECTING_ACTION
 
-async def get_forecast(city: str, days: int) -> str:
-    if days == 1:
-        return await get_current_weather(city)
+def get_day_name(date):
+    days = ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"]
+    return days[date.weekday()]
 
+async def get_forecast(city: str, days: int) -> str:
     url = f"http://api.openweathermap.org/data/2.5/forecast?q={city}&appid={WEATHER_API_KEY}&units=metric&lang=ru"
     response = requests.get(url)
 
@@ -107,7 +108,35 @@ async def get_forecast(city: str, days: int) -> str:
         elif time.hour in [21, 22, 23]:
             forecast_days[date]['evening'] = item
 
-    result = [f"Прогноз погоды в {city} на {days} дней:\n"]
+    result = [f"Прогноз погоды в {city}:"]
+
+    if days == 1:
+        today = datetime.now().date()
+        if today not in forecast_days:
+            return "❌ Нет данных на сегодня."
+
+        times = forecast_days[today]
+        date_str = today.strftime("%d.%m.%Y")
+        day_name = get_day_name(today)
+        result.append(f"\n📅 {day_name}, {date_str}")
+
+        for time_name in ['morning', 'day', 'evening']:
+            if time_name in times:
+                item = times[time_name]
+                temp = item['main']['temp']
+                weather = item['weather'][0]['main']
+                emoji, desc = WEATHER_EMOJIS.get(weather, ("", "Неизвестно"))
+
+                time_label = {
+                    'morning': '🌅 Утро (10:00)',
+                    'day': '🌞 День (16:00)',
+                    'evening': '🌙 Вечер (22:00)'
+                }[time_name]
+
+                result.append(f"{time_label}: {temp}°C, {desc} {emoji}")
+
+        return "\n".join(result)
+    result.append(f" на {days} дней:\n")
 
     for i, (date, times) in enumerate(sorted(forecast_days.items())):
         if i >= days:
@@ -131,33 +160,7 @@ async def get_forecast(city: str, days: int) -> str:
                 }[time_name]
 
                 result.append(f"{time_label}: {temp}°C, {desc} {emoji}")
-
     return "\n".join(result) if result else "❌ Нет данных для отображения"
-
-def get_day_name(date):
-    days = ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"]
-    return days[date.weekday()]
-
-async def get_current_weather(city: str) -> str:
-    url = f"http://api.openweathermap.org/data/2.5/weather?q={city}&appid={WEATHER_API_KEY}&units=metric&lang=ru"
-    response = requests.get(url)
-
-    if response.status_code != 200:
-        return "❌ Город не найден."
-
-    data = response.json()
-    temp = data['main']['temp']
-    feels_like = data['main']['feels_like']
-    humidity = data['main']['humidity']
-    wind_speed = data['wind']['speed']
-    weather = data['weather'][0]['main']
-    emoji, desc = WEATHER_EMOJIS.get(weather, ("", "Неизвестно"))
-
-    return (f"Погода в {city} сегодня 🌤:\n"
-            f"🌡 Температура: {temp}°C (ощущается как {feels_like}°C)\n"
-            f"💧 Влажность: {humidity}%\n"
-            f"🌬 Ветер: {wind_speed} м/с\n"
-            f"🌦 Условия: {desc} {emoji}")
 
 async def ask_clothing_city(update: Update, context: CallbackContext) -> int:
     query = update.callback_query
